@@ -25,6 +25,7 @@ from ANNtf2_operations import *	#generateParameterNameSeq, generateParameterName
 import ANNtf2_operations
 import ANNtf2_globalDefs
 
+debugSmallBatchSize = False
 debugOnlyTrainFinalLayer = False
 debugSingleLayerNetwork = False
 debugFastTrain = False
@@ -33,6 +34,9 @@ supportMultipleNetworks = False
 
 supportSkipLayers = False
 
+initialiseMultiplactiveUnitBiasNegative = False
+if(initialiseMultiplactiveUnitBiasNegative):
+	initialiseMultiplicativeUnitBiasNegativeOffset = -1.2
 
 Wa = {}	#additive
 Wm = {}	#multiplicative
@@ -58,7 +62,10 @@ def defineTrainingParameters(dataset):
 	global batchSize
 	
 	learningRate = 0.001
-	batchSize = 100
+	if(debugSmallBatchSize):
+		batchSize = 2
+	else:
+		batchSize = 100
 	numEpochs = 10	#100 #10
 	if(debugFastTrain):
 		trainingSteps = batchSize
@@ -102,7 +109,7 @@ def defineNeuralNetworkParameters():
 				else:
 					Wa[generateParameterNameNetwork(networkIndex, l1, "Wa")] = Walayer
 				Ba[generateParameterNameNetwork(networkIndex, l1, "Ba")] = tf.Variable(tf.zeros(n_h[l1]))
-			else:			
+			else:
 				if(supportSkipLayers):
 					for l2 in range(0, l1):
 						if(l2 < l1):
@@ -120,7 +127,10 @@ def defineNeuralNetworkParameters():
 					Wa[generateParameterNameNetwork(networkIndex, l1, "Wa")] = Walayer
 					Wm[generateParameterNameNetwork(networkIndex, l1, "Wm")] = Wmlayer
 				Ba[generateParameterNameNetwork(networkIndex, l1, "Ba")] = tf.Variable(tf.zeros(n_h[l1]))
-				Bm[generateParameterNameNetwork(networkIndex, l1, "Bm")] = tf.Variable(tf.zeros(n_h[l1]))
+				if(initialiseMultiplactiveUnitBiasNegative):
+					Bm[generateParameterNameNetwork(networkIndex, l1, "Bm")] = tf.Variable(tf.zeros(n_h[l1])+initialiseMultiplicativeUnitBiasNegativeOffset)				
+				else:
+					Bm[generateParameterNameNetwork(networkIndex, l1, "Bm")] = tf.Variable(tf.zeros(n_h[l1]))
 							
 			if(supportSkipLayers):
 				n_hLayer = calculateLayerNumHiddenUnits(l1)
@@ -170,7 +180,7 @@ def neuralNetworkPropagationAMANN(x, networkIndex=1, l=None):
 		Atrace[generateParameterNameNetwork(networkIndex, 0, "Atrace")] = AprevLayer
 	
 	for l1 in range(1, maxLayer+1):
-		print("l1 = " + str(l1))		
+		#print("\nl1 = " + str(l1))		
 		if(l1 == numberOfLayers):
 			#CHECKTHIS: last layer (fully connected additive layer, no skip layers)
 			if(supportSkipLayers):
@@ -189,20 +199,33 @@ def neuralNetworkPropagationAMANN(x, networkIndex=1, l=None):
 					AprevLayerM = multiplactiveEmulationFunctionPre(AprevLayerA)
 					Walayer = Wa[generateParameterNameNetworkSkipLayers(networkIndex, l2, l1, "Wa")]
 					Wmlayer = Wm[generateParameterNameNetworkSkipLayers(networkIndex, l2, l1, "Wm")]
-					Za = tf.add(Za, tf.add(tf.matmul(AprevLayerA, Walayer), Ba[generateParameterNameNetwork(networkIndex, l1, "Ba")]))	
-					Zm = tf.add(Zm, tf.add(tf.matmul(AprevLayerM, Wmlayer), Bm[generateParameterNameNetwork(networkIndex, l1, "Bm")]))
+					Za = tf.add(tf.matmul(AprevLayerA, Walayer))
+					Zm = tf.add(tf.matmul(AprevLayerM, Wmlayer))
 				Zm = multiplactiveEmulationFunctionPost(Zm)
+				Za = tf.add(Za, Ba[generateParameterNameNetwork(networkIndex, l1, "Ba")])
+				Zm = tf.add(Zm, Bm[generateParameterNameNetwork(networkIndex, l1, "Bm")])
 			else:
 				AprevLayerA = AprevLayer
+				#print("AprevLayer = ", AprevLayer)
 				AprevLayerM = multiplactiveEmulationFunctionPre(AprevLayerA)
-				Za = tf.add(tf.matmul(AprevLayerA, Wa[generateParameterNameNetwork(networkIndex, l1, "Wa")]), Ba[generateParameterNameNetwork(networkIndex, l1, "Ba")])
-				Zm = tf.add(tf.matmul(AprevLayerM, Wm[generateParameterNameNetwork(networkIndex, l1, "Wm")]), Bm[generateParameterNameNetwork(networkIndex, l1, "Bm")])
+				#print("AprevLayerM = ", AprevLayerM)
+				Walayer = Wa[generateParameterNameNetwork(networkIndex, l1, "Wa")]
+				Wmlayer = Wm[generateParameterNameNetwork(networkIndex, l1, "Wm")]
+				#print("Walayer = ", Walayer)
+				#print("Wmlayer = ", Wmlayer)
+				Za = tf.matmul(AprevLayerA, Walayer)
+				Zm = tf.matmul(AprevLayerM, Wmlayer)
+				#print("Za = ", Za)
+				#print("Zm = ", Zm)
 				Zm = multiplactiveEmulationFunctionPost(Zm)
+				#print("Zm = ", Zm)
+				Za = tf.add(Za, Ba[generateParameterNameNetwork(networkIndex, l1, "Ba")])
+				Zm = tf.add(Zm, Bm[generateParameterNameNetwork(networkIndex, l1, "Bm")])
 
 			Aa = activationFunction(Za)
 			Am = activationFunction(Zm)
-			print("Za = ", Za)
-			print("Zm = ", Zm)
+			#print("Za = ", Za)
+			#print("Zm = ", Zm)
 			Z = tf.concat([Za, Zm], axis=1)
 			A = tf.concat([Aa, Am], axis=1)
 		
@@ -215,13 +238,16 @@ def neuralNetworkPropagationAMANN(x, networkIndex=1, l=None):
 			Atrace[generateParameterNameNetwork(networkIndex, l1, "Atrace")] = A
 						
 		AprevLayer = A
-
+		#print("Z = ", Z)
+		#print("A = ", A)
+			
 	if(maxLayer == numberOfLayers):
 		return tf.nn.softmax(Z)
 	else:
 		return A
 
 def multiplactiveEmulationFunctionPre(AprevLayer):
+	AprevLayer = tf.clip_by_value(AprevLayer, 1e-9, 1e+9)	
 	AprevLayerM = tf.math.log(AprevLayer)
 	return AprevLayerM
 	
