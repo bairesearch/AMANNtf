@@ -51,7 +51,7 @@ if(supportSkipLayers):
 	Atrace = {}
 
 #Network parameters
-#interpret n_h[hiddenLayer] (of all actual hidden ie non-input/output layers) as the number of additive or multiplicative units (ie n_h[hiddenLayer] all = n_h[hiddenLayer] additiveOrMultiplactive * 2)
+#number of additive or multiplicative units of actual hidden ie non-input/output layers = n_h[hiddenLayer]/2
 n_h = []
 numberOfLayers = 0
 numberOfNetworks = 0
@@ -84,7 +84,8 @@ def defineNetworkParameters(num_input_neurons, num_output_neurons, datasetNumFea
 	global numberOfLayers
 	global numberOfNetworks
 	
-	n_h, numberOfLayers, numberOfNetworks, datasetNumClasses = ANNtf2_operations.defineNetworkParameters(num_input_neurons, num_output_neurons, datasetNumFeatures, dataset, numberOfNetworksSet, generateLargeNetwork=False)
+	#generateLargeNetwork=True, useEvenNumHiddenUnits=True to generate additional units for addition/multiplication
+	n_h, numberOfLayers, numberOfNetworks, datasetNumClasses = ANNtf2_operations.defineNetworkParameters(num_input_neurons, num_output_neurons, datasetNumFeatures, dataset, numberOfNetworksSet, generateLargeNetwork=True, useEvenNumHiddenUnits=True)
 	
 	return numberOfLayers
 	
@@ -101,7 +102,7 @@ def defineNeuralNetworkParameters():
 
 			if(l1 == numberOfLayers):
 				#CHECKTHIS: last layer (fully connected additive layer, no skip layers)
-				n_hPreviousLayer = calculateLayerNumHiddenUnits(l1-1)
+				n_hPreviousLayer = n_h[l1-1]
 				Walayer = tf.Variable(randomNormal([n_hPreviousLayer, n_h[l1]]))
 				if(supportSkipLayers):
 					l2 = l1-1
@@ -113,45 +114,55 @@ def defineNeuralNetworkParameters():
 				if(supportSkipLayers):
 					for l2 in range(0, l1):
 						if(l2 < l1):
-							n_hPreviousLayer = calculateLayerNumHiddenUnits(l2)
-							Walayer = tf.Variable(randomNormal([n_hPreviousLayer, n_h[l1]]))
-							Wmlayer = tf.Variable(randomNormal([n_hPreviousLayer, n_h[l1]]))
+							n_hPreviousLayer = n_h[l2]
+							n_hCurrentLayerA = calculateLayerNumAdditiveOrMultiplicativeUnits(l1)
+							n_hCurrentLayerM = calculateLayerNumAdditiveOrMultiplicativeUnits(l1)
+							Walayer = tf.Variable(randomNormal([n_hPreviousLayer, n_hCurrentLayerA]))
+							Wmlayer = tf.Variable(randomNormal([n_hPreviousLayer, n_hCurrentLayerM]))
 							Wa[generateParameterNameNetworkSkipLayers(networkIndex, l2, l1, "Wa")] = Walayer
 							Wm[generateParameterNameNetworkSkipLayers(networkIndex, l2, l1, "Wm")] = Wmlayer
 							#parameterName = generateParameterNameNetworkSkipLayers(networkIndex, l2, l1, "Wa")
 							#print("parameterName = ", parameterName)
 				else:	
-					n_hPreviousLayer = calculateLayerNumHiddenUnits(l1-1)
-					Walayer = tf.Variable(randomNormal([n_hPreviousLayer, n_h[l1]]))
-					Wmlayer = tf.Variable(randomNormal([n_hPreviousLayer, n_h[l1]]))
+					n_hPreviousLayer = n_h[l1-1]
+					n_hCurrentLayerA = calculateLayerNumAdditiveOrMultiplicativeUnits(l1)
+					n_hCurrentLayerM = calculateLayerNumAdditiveOrMultiplicativeUnits(l1)
+					Walayer = tf.Variable(randomNormal([n_hPreviousLayer, n_hCurrentLayerA]))
+					Wmlayer = tf.Variable(randomNormal([n_hPreviousLayer, n_hCurrentLayerM]))
 					Wa[generateParameterNameNetwork(networkIndex, l1, "Wa")] = Walayer
 					Wm[generateParameterNameNetwork(networkIndex, l1, "Wm")] = Wmlayer
-				Ba[generateParameterNameNetwork(networkIndex, l1, "Ba")] = tf.Variable(tf.zeros(n_h[l1]))
+					
+				n_hCurrentLayerA = calculateLayerNumAdditiveOrMultiplicativeUnits(l1)
+				n_hCurrentLayerM = calculateLayerNumAdditiveOrMultiplicativeUnits(l1)
+				Ba[generateParameterNameNetwork(networkIndex, l1, "Ba")] = tf.Variable(tf.zeros(n_hCurrentLayerA))
 				if(initialiseMultiplactiveUnitBiasNegative):
-					Bm[generateParameterNameNetwork(networkIndex, l1, "Bm")] = tf.Variable(tf.zeros(n_h[l1])+initialiseMultiplicativeUnitBiasNegativeOffset)				
+					Bm[generateParameterNameNetwork(networkIndex, l1, "Bm")] = tf.Variable(tf.zeros(n_hCurrentLayerM)+initialiseMultiplicativeUnitBiasNegativeOffset)				
 				else:
-					Bm[generateParameterNameNetwork(networkIndex, l1, "Bm")] = tf.Variable(tf.zeros(n_h[l1]))
+					Bm[generateParameterNameNetwork(networkIndex, l1, "Bm")] = tf.Variable(tf.zeros(n_hCurrentLayerM))
 							
 			if(supportSkipLayers):
-				n_hLayer = calculateLayerNumHiddenUnits(l1)
-				Ztrace[generateParameterNameNetwork(networkIndex, l1, "Ztrace")] = tf.Variable(tf.zeros([batchSize, n_hLayer], dtype=tf.dtypes.float32))
-				Atrace[generateParameterNameNetwork(networkIndex, l1, "Atrace")] = tf.Variable(tf.zeros([batchSize, n_hLayer], dtype=tf.dtypes.float32))
+				n_hCurrentLayer = n_h[l1]
+				Ztrace[generateParameterNameNetwork(networkIndex, l1, "Ztrace")] = tf.Variable(tf.zeros([batchSize, n_hCurrentLayer], dtype=tf.dtypes.float32))
+				Atrace[generateParameterNameNetwork(networkIndex, l1, "Atrace")] = tf.Variable(tf.zeros([batchSize, n_hCurrentLayer], dtype=tf.dtypes.float32))
 
 	if(supportMultipleNetworks):
 		if(numberOfNetworks > 1):
 			global WallNetworksFinalLayer
 			global BallNetworksFinalLayer
-			n_hPreviousLayer = calculateLayerNumHiddenUnits(numberOfLayers-1)
+			n_hPreviousLayer = n_h[numberOfLayers-1]
 			WlayerF = randomNormal([n_hPreviousLayer*numberOfNetworks, n_h[numberOfLayers]])
 			WallNetworksFinalLayer = tf.Variable(WlayerF)
 			BlayerF = tf.zeros(n_h[numberOfLayers])
 			BallNetworksFinalLayer= tf.Variable(BlayerF)	#not currently used
 
-def calculateLayerNumHiddenUnits(l):
+def calculateLayerNumAdditiveOrMultiplicativeUnits(l):
 	n_hLayerAll = n_h[l]
 	if((l > 0) and (l < numberOfLayers)):
-		n_hLayerAll = n_hLayerAll*2 #number of units for actual hidden layers: concatenation of additive and multiplicative neurons (x2)
-	return n_hLayerAll
+		#number of units for actual hidden layers: concatenation of additive and multiplicative neurons (x2)
+		n_hLayerAdditiveOrMultiplicative = n_hLayerAll//2
+	else:
+		n_hLayerAdditiveOrMultiplicative = n_hLayerAll
+	return n_hLayerAdditiveOrMultiplicative
 											
 def neuralNetworkPropagation(x, networkIndex=1):
 	return neuralNetworkPropagationAMANN(x, networkIndex)

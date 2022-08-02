@@ -148,7 +148,7 @@ def generateTFtrainDataFromTrainDataUnbatched(trainDataUnbatched, shuffleSize, b
 	return trainData
 
 
-def defineNetworkParameters(num_input_neurons, num_output_neurons, datasetNumFeatures, dataset, numberOfNetworks, generateLargeNetwork=False, generateNetworkStatic=False, generateDeepNetwork=False):
+def defineNetworkParameters(num_input_neurons, num_output_neurons, datasetNumFeatures, dataset, numberOfNetworks, generateLargeNetwork=False, generateNetworkStatic=False, generateDeepNetwork=False, useEvenNumHiddenUnits=False):
 	if(debugSingleLayerNetwork):
 		n_h, numberOfLayers, numberOfNetworks, datasetNumClasses = defineNetworkParametersANNsingleLayer(num_input_neurons, num_output_neurons, datasetNumFeatures, dataset, trainMultipleFiles, numberOfNetworks)
 	else:
@@ -160,7 +160,7 @@ def defineNetworkParameters(num_input_neurons, num_output_neurons, datasetNumFea
 			numberOfLayers = 6
 		else:
 			numberOfLayers = 2
-		n_h, numberOfLayers, numberOfNetworks, datasetNumClasses = defineNetworkParametersDynamic(num_input_neurons, num_output_neurons, datasetNumFeatures, dataset, numberOfNetworks, numberOfLayers, firstHiddenLayerNumberNeurons, generateNetworkStatic)
+		n_h, numberOfLayers, numberOfNetworks, datasetNumClasses = defineNetworkParametersDynamic(num_input_neurons, num_output_neurons, datasetNumFeatures, dataset, numberOfNetworks, numberOfLayers, firstHiddenLayerNumberNeurons, generateNetworkStatic, useEvenNumHiddenUnits)
 	return n_h, numberOfLayers, numberOfNetworks, datasetNumClasses
 
 def defineNetworkParametersANNsingleLayer(num_input_neurons, num_output_neurons, datasetNumFeatures, dataset, trainMultipleFiles, numberOfNetworks):
@@ -176,10 +176,20 @@ def defineNetworkParametersANNsingleLayer(num_input_neurons, num_output_neurons,
 	print("defineNetworkParametersANNsingleLayer, n_h = ", n_h)
 	
 	return 	n_h, numberOfLayers, numberOfNetworks, datasetNumClasses
+
+def roundToNearestEvenNumber(num, useEvenNumHiddenUnits):
+	if(useEvenNumHiddenUnits):
+		result = math.floor(num / 2) * 2	#round down
+		#result = round(num / 2) * 2
+	else:
+		result = num
+	return result
+   
+
+def defineNetworkParametersDynamic(num_input_neurons, num_output_neurons, datasetNumFeatures, dataset, numberOfNetworks, numberOfLayers, firstHiddenLayerNumberNeurons, generateNetworkStatic, useEvenNumHiddenUnits):
+
+	firstHiddenLayerNumberNeurons = roundToNearestEvenNumber(firstHiddenLayerNumberNeurons, useEvenNumHiddenUnits)
 	
-
-def defineNetworkParametersDynamic(num_input_neurons, num_output_neurons, datasetNumFeatures, dataset, numberOfNetworks, numberOfLayers, firstHiddenLayerNumberNeurons, generateNetworkStatic):
-
 	#configuration:	
 	if(generateNetworkStatic):
 		networkDivergenceType = "linearStatic"
@@ -207,6 +217,7 @@ def defineNetworkParametersDynamic(num_input_neurons, num_output_neurons, datase
 				n_h_x = firstHiddenLayerNumberNeurons
 			else:
 				n_h_x = int((firstHiddenLayerNumberNeurons-num_output_neurons) * ((l-1)/(numberOfLayers-1)) + num_output_neurons)
+			n_h_x = roundToNearestEvenNumber(n_h_x, useEvenNumHiddenUnits)
 			#print("n_h_x = ", n_h_x)
 			#previousNumberLayerNeurons = n_h_x
 			n_h.append(n_h_x)
@@ -215,10 +226,12 @@ def defineNetworkParametersDynamic(num_input_neurons, num_output_neurons, datase
 				n_h_x = firstHiddenLayerNumberNeurons
 			else:
 				n_h_x = int(previousNumberLayerNeurons*networkDivergence)
+			n_h_x = roundToNearestEvenNumber(n_h_x, useEvenNumHiddenUnits)
 			n_h.append(n_h_x)
 			previousNumberLayerNeurons = n_h_x
 		elif(networkDivergenceType == "linearStatic"):
 			n_h_x = firstHiddenLayerNumberNeurons
+			n_h_x = roundToNearestEvenNumber(n_h_x, useEvenNumHiddenUnits)
 			n_h.append(n_h_x)
 		elif(networkDivergenceType == "linearDivergingThenConverging"):
 			#not yet coded
