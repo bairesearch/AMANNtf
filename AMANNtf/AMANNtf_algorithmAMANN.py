@@ -15,7 +15,7 @@ see AMANNtf_main.py
 # Description:
 AMANNtf algorithm AMANN - define additive-multiplicative artificial neural network
 
-specification: additiveMultiplactiveNet-31July2022a.png
+specification: additiveMultiplicativeNet-31July2022a.png
 
 """
 
@@ -34,9 +34,13 @@ supportMultipleNetworks = False
 
 supportSkipLayers = False
 
-initialiseMultiplactiveUnitBiasNegative = False
-if(initialiseMultiplactiveUnitBiasNegative):
+initialiseMultiplicativeUnitBiasNegative = False
+if(initialiseMultiplicativeUnitBiasNegative):
 	initialiseMultiplicativeUnitBiasNegativeOffset = -1.2
+
+activationMaxVal = 10.0
+multiplicativeEmulationFunctionPreMaxVal = 1e+9
+multiplicativeEmulationFunctionPostMaxVal = 20.0
 
 Wa = {}	#additive
 Wm = {}	#multiplicative
@@ -135,7 +139,7 @@ def defineNeuralNetworkParameters():
 				n_hCurrentLayerA = calculateLayerNumAdditiveOrMultiplicativeUnits(l1)
 				n_hCurrentLayerM = calculateLayerNumAdditiveOrMultiplicativeUnits(l1)
 				Ba[generateParameterNameNetwork(networkIndex, l1, "Ba")] = tf.Variable(tf.zeros(n_hCurrentLayerA))
-				if(initialiseMultiplactiveUnitBiasNegative):
+				if(initialiseMultiplicativeUnitBiasNegative):
 					Bm[generateParameterNameNetwork(networkIndex, l1, "Bm")] = tf.Variable(tf.zeros(n_hCurrentLayerM)+initialiseMultiplicativeUnitBiasNegativeOffset)				
 				else:
 					Bm[generateParameterNameNetwork(networkIndex, l1, "Bm")] = tf.Variable(tf.zeros(n_hCurrentLayerM))
@@ -199,26 +203,32 @@ def neuralNetworkPropagationAMANN(x, networkIndex=1, l=None):
 				Walayer = Wa[generateParameterNameNetworkSkipLayers(networkIndex, l2, l1, "Wa")]
 			else:
 				Walayer = Wa[generateParameterNameNetwork(networkIndex, l1, "Wa")]
+				#print("2 Walayer = ", Walayer)
+			#print("2 AprevLayer = ", AprevLayer)
 			Z = tf.add(tf.matmul(AprevLayer, Walayer), Ba[generateParameterNameNetwork(networkIndex, l1, "Ba")])
+			#print("2 Z = ", Z)
 			A = activationFunction(Z)
+			#print("2 A = ", A)
 		else:
 			if(supportSkipLayers):
 				Za = tf.zeros([batchSize, n_h[l1]])
 				Zm = tf.zeros([batchSize, n_h[l1]])
 				for l2 in range(0, l1):
 					AprevLayerA = Atrace[generateParameterNameNetwork(networkIndex, l2, "Atrace")]
-					AprevLayerM = multiplactiveEmulationFunctionPre(AprevLayerA)
+					AprevLayerA = clipActivation(AprevLayerA)
+					AprevLayerM = multiplicativeEmulationFunctionPre(AprevLayerA)
 					Walayer = Wa[generateParameterNameNetworkSkipLayers(networkIndex, l2, l1, "Wa")]
 					Wmlayer = Wm[generateParameterNameNetworkSkipLayers(networkIndex, l2, l1, "Wm")]
 					Za = tf.add(tf.matmul(AprevLayerA, Walayer))
 					Zm = tf.add(tf.matmul(AprevLayerM, Wmlayer))
-				Zm = multiplactiveEmulationFunctionPost(Zm)
+				Zm = multiplicativeEmulationFunctionPost(Zm)
 				Za = tf.add(Za, Ba[generateParameterNameNetwork(networkIndex, l1, "Ba")])
 				Zm = tf.add(Zm, Bm[generateParameterNameNetwork(networkIndex, l1, "Bm")])
 			else:
 				AprevLayerA = AprevLayer
+				AprevLayerA = clipActivation(AprevLayerA)
 				#print("AprevLayer = ", AprevLayer)
-				AprevLayerM = multiplactiveEmulationFunctionPre(AprevLayerA)
+				AprevLayerM = multiplicativeEmulationFunctionPre(AprevLayerA)
 				#print("AprevLayerM = ", AprevLayerM)
 				Walayer = Wa[generateParameterNameNetwork(networkIndex, l1, "Wa")]
 				Wmlayer = Wm[generateParameterNameNetwork(networkIndex, l1, "Wm")]
@@ -228,18 +238,26 @@ def neuralNetworkPropagationAMANN(x, networkIndex=1, l=None):
 				Zm = tf.matmul(AprevLayerM, Wmlayer)
 				#print("Za = ", Za)
 				#print("Zm = ", Zm)
-				Zm = multiplactiveEmulationFunctionPost(Zm)
+				Zm = multiplicativeEmulationFunctionPost(Zm)
 				#print("Zm = ", Zm)
 				Za = tf.add(Za, Ba[generateParameterNameNetwork(networkIndex, l1, "Ba")])
 				Zm = tf.add(Zm, Bm[generateParameterNameNetwork(networkIndex, l1, "Bm")])
-
+				#print("Za = ", Za)
+				#print("Zm = ", Zm)
+				
 			Aa = activationFunction(Za)
 			Am = activationFunction(Zm)
-			#print("Za = ", Za)
-			#print("Zm = ", Zm)
+			#print("Aa = ", Aa)
+			#print("Am = ", Am)
 			Z = tf.concat([Za, Zm], axis=1)
 			A = tf.concat([Aa, Am], axis=1)
-		
+			#print("Z = ", Z)
+			#print("A = ", A)
+
+			if(tf.reduce_any(tf.math.is_nan(A))):
+				print("tf.reduce_any(tf.math.is_nan(A))")
+				ex
+
 		if(debugOnlyTrainFinalLayer):
 			if(l1 < numberOfLayers):
 				A = tf.stop_gradient(A)
@@ -253,17 +271,24 @@ def neuralNetworkPropagationAMANN(x, networkIndex=1, l=None):
 		#print("A = ", A)
 			
 	if(maxLayer == numberOfLayers):
-		return tf.nn.softmax(Z)
+		pred = tf.nn.softmax(Z)
+		#print("pred = ", pred)
+		return pred
 	else:
 		return A
 
-def multiplactiveEmulationFunctionPre(AprevLayer):
-	AprevLayer = tf.clip_by_value(AprevLayer, 1e-9, 1e+9)	
+def clipActivation(A):
+	A = tf.clip_by_value(A, -activationMaxVal, activationMaxVal)
+	return A
+	
+def multiplicativeEmulationFunctionPre(AprevLayer):
+	AprevLayer = tf.clip_by_value(AprevLayer, 1e-9, multiplicativeEmulationFunctionPreMaxVal)	
 	AprevLayerM = tf.math.log(AprevLayer)
 	return AprevLayerM
 	
-def multiplactiveEmulationFunctionPost(ZmIntermediary):
-	Zm = tf.math.exp(ZmIntermediary) 
+def multiplicativeEmulationFunctionPost(ZmIntermediary):
+	ZmIntermediary = tf.clip_by_value(ZmIntermediary, -multiplicativeEmulationFunctionPostMaxVal, multiplicativeEmulationFunctionPostMaxVal)
+	Zm = tf.math.exp(ZmIntermediary)
 	return Zm
 	
 def activationFunction(Z):
