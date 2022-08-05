@@ -39,7 +39,9 @@ if(initialiseMultiplicativeUnitBiasNegative):
 	initialiseMultiplicativeUnitBiasNegativeOffset = -1.2
 
 activationMaxVal = 10.0
-multiplicativeEmulationFunctionPreMaxVal = 1e+9
+multiplicativeEmulationFunctionOffsetVal = 1.0	#add/subtract
+multiplicativeEmulationFunctionPreMinVal = 1e-9
+multiplicativeEmulationFunctionPreMaxVal = 1e+9	#or activationMaxVal (effective)
 multiplicativeEmulationFunctionPostMaxVal = 20.0
 
 Wa = {}	#additive
@@ -80,7 +82,6 @@ def defineTrainingParameters(dataset):
 			
 	return learningRate, trainingSteps, batchSize, displayStep, numEpochs
 	
-
 
 def defineNetworkParameters(num_input_neurons, num_output_neurons, datasetNumFeatures, dataset, numberOfNetworksSet):
 
@@ -125,8 +126,6 @@ def defineNeuralNetworkParameters():
 							Wmlayer = tf.Variable(randomNormal([n_hPreviousLayer, n_hCurrentLayerM]))
 							Wa[generateParameterNameNetworkSkipLayers(networkIndex, l2, l1, "Wa")] = Walayer
 							Wm[generateParameterNameNetworkSkipLayers(networkIndex, l2, l1, "Wm")] = Wmlayer
-							#parameterName = generateParameterNameNetworkSkipLayers(networkIndex, l2, l1, "Wa")
-							#print("parameterName = ", parameterName)
 				else:	
 					n_hPreviousLayer = n_h[l1-1]
 					n_hCurrentLayerA = calculateLayerNumAdditiveOrMultiplicativeUnits(l1)
@@ -203,12 +202,8 @@ def neuralNetworkPropagationAMANN(x, networkIndex=1, l=None):
 				Walayer = Wa[generateParameterNameNetworkSkipLayers(networkIndex, l2, l1, "Wa")]
 			else:
 				Walayer = Wa[generateParameterNameNetwork(networkIndex, l1, "Wa")]
-				#print("2 Walayer = ", Walayer)
-			#print("2 AprevLayer = ", AprevLayer)
 			Z = tf.add(tf.matmul(AprevLayer, Walayer), Ba[generateParameterNameNetwork(networkIndex, l1, "Ba")])
-			#print("2 Z = ", Z)
 			A = activationFunction(Z)
-			#print("2 A = ", A)
 		else:
 			if(supportSkipLayers):
 				Za = tf.zeros([batchSize, n_h[l1]])
@@ -227,32 +222,23 @@ def neuralNetworkPropagationAMANN(x, networkIndex=1, l=None):
 			else:
 				AprevLayerA = AprevLayer
 				AprevLayerA = clipActivation(AprevLayerA)
-				#print("AprevLayer = ", AprevLayer)
 				AprevLayerM = multiplicativeEmulationFunctionPre(AprevLayerA)
-				#print("AprevLayerM = ", AprevLayerM)
+
 				Walayer = Wa[generateParameterNameNetwork(networkIndex, l1, "Wa")]
 				Wmlayer = Wm[generateParameterNameNetwork(networkIndex, l1, "Wm")]
-				#print("Walayer = ", Walayer)
 				#print("Wmlayer = ", Wmlayer)
 				Za = tf.matmul(AprevLayerA, Walayer)
 				Zm = tf.matmul(AprevLayerM, Wmlayer)
-				#print("Za = ", Za)
 				#print("Zm = ", Zm)
 				Zm = multiplicativeEmulationFunctionPost(Zm)
 				#print("Zm = ", Zm)
 				Za = tf.add(Za, Ba[generateParameterNameNetwork(networkIndex, l1, "Ba")])
 				Zm = tf.add(Zm, Bm[generateParameterNameNetwork(networkIndex, l1, "Bm")])
-				#print("Za = ", Za)
-				#print("Zm = ", Zm)
 				
 			Aa = activationFunction(Za)
 			Am = activationFunction(Zm)
-			#print("Aa = ", Aa)
-			#print("Am = ", Am)
 			Z = tf.concat([Za, Zm], axis=1)
 			A = tf.concat([Aa, Am], axis=1)
-			#print("Z = ", Z)
-			#print("A = ", A)
 
 			if(tf.reduce_any(tf.math.is_nan(A))):
 				print("tf.reduce_any(tf.math.is_nan(A))")
@@ -267,12 +253,9 @@ def neuralNetworkPropagationAMANN(x, networkIndex=1, l=None):
 			Atrace[generateParameterNameNetwork(networkIndex, l1, "Atrace")] = A
 						
 		AprevLayer = A
-		#print("Z = ", Z)
-		#print("A = ", A)
 			
 	if(maxLayer == numberOfLayers):
 		pred = tf.nn.softmax(Z)
-		#print("pred = ", pred)
 		return pred
 	else:
 		return A
@@ -282,13 +265,15 @@ def clipActivation(A):
 	return A
 	
 def multiplicativeEmulationFunctionPre(AprevLayer):
-	AprevLayer = tf.clip_by_value(AprevLayer, 1e-9, multiplicativeEmulationFunctionPreMaxVal)	
+	AprevLayer = AprevLayer + multiplicativeEmulationFunctionOffsetVal
+	AprevLayer = tf.clip_by_value(AprevLayer, multiplicativeEmulationFunctionPreMinVal, multiplicativeEmulationFunctionPreMaxVal)	
 	AprevLayerM = tf.math.log(AprevLayer)
 	return AprevLayerM
 	
 def multiplicativeEmulationFunctionPost(ZmIntermediary):
 	ZmIntermediary = tf.clip_by_value(ZmIntermediary, -multiplicativeEmulationFunctionPostMaxVal, multiplicativeEmulationFunctionPostMaxVal)
 	Zm = tf.math.exp(ZmIntermediary)
+	Zm = Zm - multiplicativeEmulationFunctionOffsetVal
 	return Zm
 	
 def activationFunction(Z):
