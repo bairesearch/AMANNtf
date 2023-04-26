@@ -14,13 +14,13 @@ MIT License
 
 ### Installation
 ```
-conda create -n ANNtf python=3.7
-source activate ANNtf
+conda create -n anntf2 python=3.7
+source activate anntf2
 conda install -c tensorflow tensorflow=2.3
 ```
 
 ### Execution
 ```
-source activate ANNtf
+source activate anntf2
 python3 AMANNtf_main.py
 ```

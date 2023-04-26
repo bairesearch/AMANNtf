@@ -21,11 +21,15 @@ specification: additiveMultiplicativeNet-31July2022a.png
 
 import tensorflow as tf
 import numpy as np
-from ANNtf2_operations import *	#generateParameterNameSeq, generateParameterName, defineNetworkParameters
-import ANNtf2_operations
-import ANNtf2_globalDefs
+from ANNtf_operations import *	#generateParameterNameSeq, generateParameterName, defineNetworkParameters
+import ANNtf_operations
+import ANNtf_globalDefs
 
+debugGenerateDeepNetwork = False	#test for debug (ensure no explosion of A activations across layers)
+debugGenerateLargeNetwork = False	#test for debug (ensure no explosion of A activations across layers)
+	
 debugSmallBatchSize = False
+
 debugOnlyTrainFinalLayer = False
 debugSingleLayerNetwork = False
 debugFastTrain = False
@@ -89,8 +93,10 @@ def defineNetworkParameters(num_input_neurons, num_output_neurons, datasetNumFea
 	global numberOfLayers
 	global numberOfNetworks
 	
+	generateNetworkStatic = True
+	
 	#generateLargeNetwork=True, useEvenNumHiddenUnits=True to generate additional units for addition/multiplication
-	n_h, numberOfLayers, numberOfNetworks, datasetNumClasses = ANNtf2_operations.defineNetworkParameters(num_input_neurons, num_output_neurons, datasetNumFeatures, dataset, numberOfNetworksSet, generateLargeNetwork=True, useEvenNumHiddenUnits=True)
+	n_h, numberOfLayers, numberOfNetworks, datasetNumClasses = ANNtf_operations.defineNetworkParameters(num_input_neurons, num_output_neurons, datasetNumFeatures, dataset, numberOfNetworksSet, generateDeepNetwork=debugGenerateDeepNetwork, generateNetworkStatic=generateNetworkStatic, generateLargeNetwork=debugGenerateLargeNetwork, useEvenNumHiddenUnits=True)
 	
 	return numberOfLayers
 	
@@ -190,6 +196,8 @@ def neuralNetworkPropagationAMANN(x, networkIndex=1, l=None):
 		maxLayer = l
 			
 	AprevLayer = x
+	#print("x = ", x)
+	
 	if(supportSkipLayers):
 		Atrace[generateParameterNameNetwork(networkIndex, 0, "Atrace")] = AprevLayer
 	
@@ -253,6 +261,7 @@ def neuralNetworkPropagationAMANN(x, networkIndex=1, l=None):
 			Atrace[generateParameterNameNetwork(networkIndex, l1, "Atrace")] = A
 						
 		AprevLayer = A
+		#print("A = ", A)
 			
 	if(maxLayer == numberOfLayers):
 		pred = tf.nn.softmax(Z)
